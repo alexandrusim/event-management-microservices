@@ -1,0 +1,85 @@
+services:
+
+  event-db:
+    image: mariadb:latest
+    container_name: event-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_pass
+      MYSQL_DATABASE: event_manager
+      MYSQL_USER: event_user
+      MYSQL_PASSWORD: event_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+  mongo-db:
+    image: mongo:latest
+    container_name: mongo-db
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+
+  idm-service:
+    build: ./idm-service
+    container_name: idm-service
+    command: python server.py
+    restart: on-failure
+    depends_on:
+      - event-db
+    ports:
+      - "50051:50051"
+    environment:
+      - JWT_SECRET=secret
+      - DB_HOST=event-db
+      - DB_USER=event_user
+      - DB_PASSWORD=event_pass
+      - DB_NAME=event_manager
+
+  event-manager:
+    build: ./event-manager
+    container_name: event-manager
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./event-manager:/app
+    restart: on-failure
+    depends_on:
+      - event-db
+      - idm-service
+    ports:
+      - "8000:8000"
+    environment:
+      - JWT_SECRET=secret
+      - DB_HOST=event-db
+      - DB_USER=event_user
+      - DB_PASSWORD=event_pass
+      - DB_NAME=event_manager
+      - IDM_GRPC_ADDRESS=idm-service:50051
+      - CLIENT_MANAGER_URL=http://client-manager:8001
+
+  client-manager:
+    build: ./client-manager
+    container_name: client-manager
+    command: uvicorn main_client:app --host 0.0.0.0 --port 8001 --reload
+    volumes:
+      - ./client-manager:/app
+    restart: on-failure
+    depends_on:
+      - mongo-db
+      - event-manager
+      - idm-service
+    ports:
+      - "8001:8001"
+    environment:
+      - JWT_SECRET=secret
+      - MONGO_URL=mongodb://mongo-db:27017/
+      - EVENT_MANAGER_URL=http://event-manager:8000
+      - IDM_GRPC_ADDRESS=idm-service:50051
+
+volumes:
+  mariadb_data:
+  mongodb_data:

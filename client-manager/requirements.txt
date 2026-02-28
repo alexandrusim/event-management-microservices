@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pymongo
+SQLAlchemy
+pymysql
+python-dotenv
+grpcio
+grpcio-tools
+httpx
+pydantic
